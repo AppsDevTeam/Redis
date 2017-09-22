@@ -66,7 +66,7 @@ class RedisExtension extends Nette\DI\CompilerExtension
 		$this->configuredClients = array();
 
 		$builder = $this->getContainerBuilder();
-		$config = self::fixClientConfig($this->getConfig($this->defaults + $this->clientDefaults));
+		$config = $this->processClientConfig($this->getConfig($this->defaults + $this->clientDefaults));
 
 		$this->buildClient(NULL, $config);
 
@@ -101,7 +101,7 @@ class RedisExtension extends Nette\DI\CompilerExtension
 		}
 
 		$config = Config\Helpers::merge($config, $defaultConfig);
-		$config = array_intersect_key(self::fixClientConfig($config), $this->clientDefaults);
+		$config = array_intersect_key($this->processClientConfig($config), $this->clientDefaults);
 
 		$client = $builder->addDefinition($clientName = $this->prefix(($name ? $name . '_' : '') . 'client'))
 			->setClass('Kdyby\Redis\RedisClient', array(
@@ -214,7 +214,7 @@ class RedisExtension extends Nette\DI\CompilerExtension
 			'connectionAttempts' => $config['connectionAttempts'],
 			'persistent' => $config['persistent'],
 		));
-		$sessionConfig = self::fixClientConfig($sessionConfig);
+		$sessionConfig = $this->processClientConfig($sessionConfig);
 
 		$this->buildClient('sessionHandler', array('debugger' => FALSE) + $sessionConfig);
 
@@ -304,7 +304,35 @@ class RedisExtension extends Nette\DI\CompilerExtension
 		return $config;
 	}
 
+	protected function processClientConfig(array $config) {
+		$config = static::fixClientConfig($config);
 
+		if (is_array($config['database'])) {
+			$config['database'] = static::getRedisDatabase($config['database']);
+		}
+
+		return $config;
+	}
+
+	/**
+	 * Computes Redis DB number based on Deployer (https://deployer.org/) release number.
+	 * @param array $options
+	 * @return int
+	 */
+	protected static function getRedisDatabase($options) {
+
+			// Example of $_SERVER['DOCUMENT_ROOT']: '/var/www/my-project.com/releases/7/web'
+			preg_match_all('|releases/(\d+)/|', $_SERVER['DOCUMENT_ROOT'], $matches, PREG_SET_ORDER);
+			$lastMatch = end($matches);
+
+			if (! isset($lastMatch[1])) {
+				return $options['databaseFrom'];
+			}
+
+			$releaseVersion = $lastMatch[1];
+
+			return $options['databaseFrom'] + ($releaseVersion % $options['keepReleases']);
+	}
 
 	/**
 	 * @param \Nette\Configurator $config

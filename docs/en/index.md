@@ -124,3 +124,18 @@ You can disable the native driver by this option (and the emulated will take con
 redis:
 	session: {native: off}
 ```
+
+
+## Deployer - database number based on release number
+
+If you want to have zero-downtime-deployment (using for example [Deployer](https://deployer.org/)), you need to have two instances of your project running concurrently.
+So you need also two Redis databases.
+If you don't want to switch the database manually before every deploy in your neon, you can compute it based on release number.
+The formula is `<databaseFrom> + (<releaseVersion> % <keepReleases>)`, so following example will set DB `0` for even releases and `1` for odd releases.
+
+```yml
+redis:
+	database:
+		databaseFrom: 0
+		keepReleases: 2
+```
