@@ -322,7 +322,7 @@ class RedisExtension extends Nette\DI\CompilerExtension
 	public static function getRedisDatabase($options) {
 
 			// Example of $_SERVER['DOCUMENT_ROOT']: '/var/www/my-project.com/releases/7/web'
-			preg_match_all('|releases/(\d+)/|', $_SERVER['DOCUMENT_ROOT'], $matches, PREG_SET_ORDER);
+			preg_match_all('|releases/(\d+)/|', realpath($_SERVER['DOCUMENT_ROOT']), $matches, PREG_SET_ORDER);
 			$lastMatch = end($matches);
 
 			if (! isset($lastMatch[1])) {
