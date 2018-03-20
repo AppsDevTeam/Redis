@@ -22,8 +22,9 @@ use Tracy\IBarPanel;
 /**
  * @author Filip Procházka <filip@prochazka.su>
  */
-class Panel extends Nette\Object implements IBarPanel
+class Panel implements IBarPanel
 {
+	use Nette\SmartObject;
 
 	/** @internal */
 	const TIMER_NAME = 'redis-client-timer';
@@ -41,12 +42,12 @@ class Panel extends Nette\Object implements IBarPanel
 	/**
 	 * @var array
 	 */
-	private $queries = array();
+	private $queries = [];
 
 	/**
 	 * @var array
 	 */
-	private $errors = array();
+	private $errors = [];
 
 	/**
 	 * @var bool
@@ -80,13 +81,13 @@ class Panel extends Nette\Object implements IBarPanel
 
 
 
-	public function begin($args)
+	public function begin($args, $dbIndex)
 	{
 		if (!$this->renderPanel) {
 			$cmd = '';
 
 		} else {
-			$cmd = array();
+			$cmd = [];
 			foreach ($args as $arg) {
 				if (!$arg instanceof \Closure) {
 					$cmd[] = is_array($arg) ? urldecode(http_build_query($arg, '', ' ')) : $arg;
@@ -95,11 +96,12 @@ class Panel extends Nette\Object implements IBarPanel
 			$cmd = implode(' ', $cmd);
 		}
 
-		$this->queries[] = (object) array(
-			'errors' => array(),
+		$this->queries[] = (object) [
+			'errors' => [],
 			'cmd' => $cmd,
+			'db' => $dbIndex,
 			'time' => 0
-		);
+		];
 
 		Debugger::timer(self::TIMER_NAME); // reset timer
 	}
@@ -107,9 +109,9 @@ class Panel extends Nette\Object implements IBarPanel
 
 
 	/**
-	 * @param \Exception $e
+	 * @param \Exception|\Throwable $e
 	 */
-	public function error(\Exception $e)
+	public function error($e)
 	{
 		$this->errors[] = $e;
 		if ($query = end($this->queries)) {
@@ -170,6 +172,7 @@ class Panel extends Nette\Object implements IBarPanel
 		$h = 'htmlSpecialChars';
 		foreach ($this->queries as $query) {
 			$s .= '<tr><td>' . sprintf('%0.3f', $query->time * 1000000);
+			$s .= '</td><td class="kdyby-RedisClientPanel-dbindex">' . $query->db;
 			$s .= '</td><td class="kdyby-RedisClientPanel-cmd">' .
 				$h(substr(Code\Helpers::dump(self::$maxLength ? substr($query->cmd, 0, self::$maxLength) : $query->cmd), 1, -1));
 			$s .= '</td></tr>';
@@ -179,7 +182,7 @@ class Panel extends Nette\Object implements IBarPanel
 			'<h1>Queries: ' . count($this->queries) . ($this->totalTime ? ', time: ' . sprintf('%0.3f', $this->totalTime * 1000) . ' ms' : '') . '</h1>
 			<div class="nette-inner tracy-inner kdyby-RedisClientPanel">
 			<table>
-				<tr><th>Time&nbsp;µs</th><th>Command</th></tr>' . $s . '
+				<tr><th>Time&nbsp;µs</th><th title="Database index">DB</th><th>Command</th></tr>' . $s . '
 			</table>
 			</div>';
 	}
@@ -210,10 +213,10 @@ class Panel extends Nette\Object implements IBarPanel
 			}
 
 			if ($panel !== NULL) {
-				$panel = array(
+				$panel = [
 					'tab' => 'Redis Response',
 					'panel' => $panel
-				);
+				];
 			}
 
 			return $panel;
@@ -227,7 +230,7 @@ class Panel extends Nette\Object implements IBarPanel
 	 */
 	public static function register()
 	{
-		self::getDebuggerBlueScreen()->addPanel(array($panel = new static(), 'renderException'));
+		self::getDebuggerBlueScreen()->addPanel([$panel = new static(), 'renderException']);
 		self::getDebuggerBar()->addPanel($panel);
 		return $panel;
 	}

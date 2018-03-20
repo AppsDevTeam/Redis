@@ -33,7 +33,7 @@ class ExtensionTest extends Tester\TestCase
 		$config = new Nette\Configurator();
 		$config->setTempDirectory(TEMP_DIR);
 		Kdyby\Redis\DI\RedisExtension::register($config);
-		$config->addConfig(__DIR__ . '/files/config.neon', $config::NONE);
+		$config->addConfig(__DIR__ . '/files/config.neon');
 
 		return $config->createContainer();
 	}
@@ -48,9 +48,9 @@ class ExtensionTest extends Tester\TestCase
 		Assert::true($dic->getService('nette.cacheJournal') instanceof Kdyby\Redis\RedisLuaJournal);
 		Assert::true($dic->getService('redis.cacheStorage') instanceof Kdyby\Redis\RedisStorage);
 		Assert::true($dic->getService('cacheStorage') instanceof Kdyby\Redis\RedisStorage);
-		Assert::same(array(
-			'saveHandler' => 'redis',
-			'savePath' => 'tcp://127.0.0.1:6379?weight=1&timeout=10&database=0&prefix=Nette.Session%3A',
+		Assert::same([
+			'save_handler' => 'redis',
+			'save_path' => 'tcp://127.0.0.1:6379?weight=1&timeout=10&database=0&prefix=Nette.Session%3A',
 			'referer_check' => '',
 			'use_cookies' => 1,
 			'use_only_cookies' => 1,
@@ -61,11 +61,7 @@ class ExtensionTest extends Tester\TestCase
 			'cookie_secure' => FALSE,
 			'cookie_httponly' => TRUE,
 			'gc_maxlifetime' => 10800,
-			'cache_limiter' => NULL,
-			'cache_expire' => NULL,
-			'hash_function' => NULL,
-			'hash_bits_per_character' => NULL,
-		), $dic->getService('session')->getOptions());
+		], $dic->getService('session')->getOptions());
 	}
 
 }

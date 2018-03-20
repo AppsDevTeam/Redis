@@ -99,8 +99,9 @@ abstract class AbstractRedisTestCase extends Tester\TestCase
 	 */
 	protected function threadStress(\Closure $closure, $repeat = 100, $threads = 30)
 	{
-		$runTest = Tracy\Helpers::findTrace(debug_backtrace(), 'Tester\TestCase::runTest') ?: array('args' => array(0 => 'test'));
-		$scriptFile = TEMP_DIR . '/scripts/' . str_replace('%5C', '_', urlencode(get_class($this))) . '.' . urlencode($runTest['args'][0]) . '.php';
+		$runTest = Tracy\Helpers::findTrace(debug_backtrace(), 'Tester\TestCase::runTest') ?: ['args' => [0 => 'test']];
+		$testName = ($runTest['args'][0] instanceof \ReflectionFunctionAbstract) ? $runTest['args'][0]->getName() : (string) $runTest['args'][0];
+		$scriptFile = TEMP_DIR . '/scripts/' . str_replace('%5C', '_', urlencode(get_class($this))) . '.' . urlencode($testName) . '.php';
 		FileSystem::createDir($dir = dirname($scriptFile));
 
 		$extractor = new ClosureExtractor($closure);
@@ -114,7 +115,9 @@ abstract class AbstractRedisTestCase extends Tester\TestCase
 		$runner = new Tester\Runner\Runner(new Tester\Runner\ZendPhpInterpreter('php-cgi', ' -c ' . Tester\Helpers::escapeArg(__DIR__ . '/../../php.ini-unix')));
 		$runner->outputHandlers[] = $collector;
 		$runner->threadCount = $threads;
-		$runner->paths = array($scriptFile);
+		$runner->paths = [$scriptFile];
+
+		putenv(\Tester\Environment::COVERAGE); // unset coverage fur subprocesses
 		$runner->run();
 
 		return $runner->getResults();
@@ -145,17 +148,17 @@ class ResultsCollector implements Tester\Runner\OutputHandler
 		$this->dir = $dir;
 
 		if (!$testName) {
-			$runTest = Tracy\Helpers::findTrace(debug_backtrace(), 'Tester\TestCase::runTest') ?: array('args' => array(0 => 'test'));
+			$runTest = Tracy\Helpers::findTrace(debug_backtrace(), 'Tester\TestCase::runTest') ?: ['args' => [0 => 'test']];
 			$testName = $runTest['args'][0];
 		}
-		$this->testName = $testName;
+		$this->testName = $testName instanceof \ReflectionFunctionAbstract ? $testName->getName() : (string) $testName;
 	}
 
 
 
 	public function begin()
 	{
-		$this->results = array();
+		$this->results = [];
 
 		if (is_dir($this->dir)) {
 			foreach (glob(sprintf('%s/%s.*.actual', $this->dir, urlencode($this->testName))) as $file) {
@@ -171,7 +174,7 @@ class ResultsCollector implements Tester\Runner\OutputHandler
 		$message = Tester\Dumper::removeColors(trim($message));
 
 		if ($result != Tester\Runner\Runner::PASSED) {
-			$this->results[] = array($testName, $message);
+			$this->results[] = [$testName, $message];
 		}
 	}
 
@@ -200,8 +203,9 @@ class ResultsCollector implements Tester\Runner\OutputHandler
 /**
  * @author Filip Procházka <filip@prochazka.su>
  */
-class ClosureExtractor extends Nette\Object
+class ClosureExtractor
 {
+	use Nette\SmartObject;
 
 	/**
 	 * @var GlobalFunction
@@ -242,12 +246,12 @@ DOC;
 		$code .= 'use ' . implode(";\n" . 'use ', $uses->parse()) . ";\n\n";
 
 		// bootstrap
-		$code .= Code\Helpers::formatArgs('require_once ?;', array(__DIR__ . '/../bootstrap.php')) . "\n";
+		$code .= Code\Helpers::formatArgs('require_once ?;', [__DIR__ . '/../bootstrap.php']) . "\n";
 		$code .= '\Tester\Environment::$checkAssertions = FALSE;' . "\n";
-		$code .= Code\Helpers::formatArgs('\Tracy\Debugger::$logDirectory = ?;', array(TEMP_DIR)) . "\n\n\n";
+		$code .= Code\Helpers::formatArgs('\Tracy\Debugger::$logDirectory = ?;', [TEMP_DIR]) . "\n\n\n";
 
 		// script
-		$code .= Code\Helpers::formatArgs('extract(?);', array($this->closure->getStaticVariables())) . "\n\n";
+		$code .= Code\Helpers::formatArgs('extract(?);', [$this->closure->getStaticVariables()]) . "\n\n";
 		$code .= $codeParser->parse() . "\n\n\n";
 
 		return $code;
@@ -260,8 +264,9 @@ DOC;
 /**
  * @author Filip Procházka <filip@prochazka.su>
  */
-class NamespaceUses extends Nette\Object
+class NamespaceUses
 {
+	use Nette\SmartObject;
 
 	/**
 	 * @var \ReflectionClass
@@ -309,7 +314,7 @@ class NamespaceUses extends Nette\Object
 		$expected = FALSE;
 		$class = $namespace = $name = '';
 		$level = $minLevel = 0;
-		$uses = array();
+		$uses = [];
 
 		foreach (@token_get_all($code) as $token) { // intentionally @
 			if ($token === '}') {
@@ -392,8 +397,9 @@ class NamespaceUses extends Nette\Object
 /**
  * @author Filip Procházka <filip@prochazka.su>
  */
-class FunctionCode extends Nette\Object
+class FunctionCode
 {
+	use Nette\SmartObject;
 
 	/**
 	 * @var \ReflectionFunctionAbstract
@@ -463,7 +469,7 @@ class FunctionCode extends Nette\Object
 		$expected = FALSE;
 		$function = $class = $namespace = $name = '';
 		$line = $level = $minLevel = 0;
-		$functionLevels = $functions = $classes = array();
+		$functionLevels = $functions = $classes = [];
 
 		foreach (@token_get_all($code) as $token) { // intentionally @
 			if ($token === '}') {
@@ -574,12 +580,17 @@ class SessionHandlerDecorator implements \SessionHandlerInterface
 	/**
 	 * @var array
 	 */
-	public $methods = array();
+	public $series = [];
 
 	/**
 	 * @var bool
 	 */
 	public $log = FALSE;
+
+	/**
+	 * @var array
+	 */
+	public $openedSessionCalls = [];
 
 	/**
 	 * @var \SessionHandlerInterface
@@ -609,7 +620,7 @@ class SessionHandlerDecorator implements \SessionHandlerInterface
 	public function open($save_path, $session_id)
 	{
 		$this->log(sprintf('%s: %s', __FUNCTION__, $session_id));
-		$this->methods[] = array(__FUNCTION__ => func_get_args());
+		$this->openedSessionCalls[] = array_merge([__FUNCTION__], func_get_args());
 		return $this->handler->open($save_path, $session_id);
 	}
 
@@ -618,7 +629,9 @@ class SessionHandlerDecorator implements \SessionHandlerInterface
 	public function close()
 	{
 		$this->log(__FUNCTION__);
-		$this->methods[] = array(__FUNCTION__ => func_get_args());
+		$this->openedSessionCalls[] = array_merge([__FUNCTION__], func_get_args());
+		$this->series[] = $this->openedSessionCalls;
+		$this->openedSessionCalls = [];
 		return $this->handler->close();
 	}
 
@@ -627,7 +640,7 @@ class SessionHandlerDecorator implements \SessionHandlerInterface
 	public function read($session_id)
 	{
 		$this->log(sprintf('%s: %s', __FUNCTION__, $session_id));
-		$this->methods[] = array(__FUNCTION__ => func_get_args());
+		$this->openedSessionCalls[] = array_merge([__FUNCTION__], func_get_args());
 		try {
 			return $this->handler->read($session_id);
 
@@ -642,7 +655,7 @@ class SessionHandlerDecorator implements \SessionHandlerInterface
 	public function destroy($session_id)
 	{
 		$this->log(sprintf('%s: %s', __FUNCTION__, $session_id));
-		$this->methods[] = array(__FUNCTION__ => func_get_args());
+		$this->openedSessionCalls[] = array_merge([__FUNCTION__], func_get_args());
 		try {
 			return $this->handler->destroy($session_id);
 
@@ -657,7 +670,7 @@ class SessionHandlerDecorator implements \SessionHandlerInterface
 	public function write($session_id, $session_data)
 	{
 		$this->log(sprintf('%s: %s', __FUNCTION__, $session_id));
-		$this->methods[] = array(__FUNCTION__ => func_get_args());
+		$this->openedSessionCalls[] = array_merge([__FUNCTION__], func_get_args());
 		try {
 			return $this->handler->write($session_id, $session_data);
 
@@ -672,7 +685,7 @@ class SessionHandlerDecorator implements \SessionHandlerInterface
 	public function gc($maxlifetime)
 	{
 		$this->log(__FUNCTION__);
-		$this->methods[] = array(__FUNCTION__ => func_get_args());
+		$this->openedSessionCalls[] = array_merge([__FUNCTION__], func_get_args());
 		return $this->handler->gc($maxlifetime);
 	}
 

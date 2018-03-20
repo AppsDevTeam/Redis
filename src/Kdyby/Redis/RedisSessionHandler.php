@@ -24,8 +24,9 @@ use Nette;
  *
  * @author Filip Procházka <filip@prochazka.su>
  */
-class RedisSessionHandler extends Nette\Object implements \SessionHandlerInterface
+class RedisSessionHandler implements \SessionHandlerInterface
 {
+	use Nette\SmartObject;
 
 	/** @internal cache structure */
 	const NS_NETTE = 'Nette.Session:';
@@ -33,7 +34,7 @@ class RedisSessionHandler extends Nette\Object implements \SessionHandlerInterfa
 	/**
 	 * @var array
 	 */
-	private $ssIds = array();
+	private $ssIds = [];
 
 	/**
 	 * @var RedisClient
@@ -84,11 +85,17 @@ class RedisSessionHandler extends Nette\Object implements \SessionHandlerInterfa
 		if ($this->ttl === NULL) {
 			if ($this->session !== NULL) {
 				$options = $this->session->getOptions();
-				$this->ttl = min($options['cookie_lifetime'], $options['gc_maxlifetime']);
+				$ttl = min(array_filter([$options['cookie_lifetime'], $options['gc_maxlifetime']], function ($v) { return $v > 0; })) ?: 0;
 
 			} else {
-				$this->ttl = ini_get("session.gc_maxlifetime");
+				$ttl = ini_get('session.gc_maxlifetime');
 			}
+
+			if ($ttl <= 0) {
+				throw new \InvalidArgumentException('PHP settings "cookie_lifetime" or "gc_maxlifetime" must be greater than 0');
+			}
+
+			$this->ttl = $ttl;
 		}
 
 		return $this->ttl;
@@ -176,7 +183,7 @@ class RedisSessionHandler extends Nette\Object implements \SessionHandlerInterfa
 		foreach ($this->ssIds as $id => $key) {
 			$this->client->unlock($key);
 		}
-		$this->ssIds = array();
+		$this->ssIds = [];
 
 		return TRUE;
 	}
@@ -223,13 +230,6 @@ class RedisSessionHandler extends Nette\Object implements \SessionHandlerInterfa
 	private function formatKey($id)
 	{
 		return self::NS_NETTE . $id;
-	}
-
-
-
-	public function __destruct()
-	{
-		$this->close();
 	}
 
 }
