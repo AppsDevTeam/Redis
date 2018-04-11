@@ -180,7 +180,7 @@ interface IRedisDriver
 	 * @param int $timeout value in seconds (optional, default is 0 meaning unlimited)
 	 * @return bool
 	 */
-	function connect($host, $port = NULL, $timeout = 0);
+	function connect($host, $port = NULL, $timeout = 0, $retry_interval = NULL);
 
 	/**
 	 * Change the selected database for the current connection.
@@ -214,7 +214,7 @@ interface IRedisDriver
 	 * @param $script
 	 * @return mixed
 	 */
-	function script($command, $script = NULL);
+	function script($command, ...$args);
 
 	/**
 	 * @param string $scriptSha The sha1 encoded hash of the script you want to run.
